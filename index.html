@@ -1,0 +1,295 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>NEON SNAKE ARCADE</title>
+<meta name="viewport" content="width=device-width,initial-scale=1.0">
+
+<link href="https://fonts.googleapis.com/css2?family=Press+Start+2P&display=swap" rel="stylesheet">
+
+<style>
+*{margin:0;padding:0;box-sizing:border-box}
+
+body{
+  background:radial-gradient(circle at center,#020617,#000);
+  font-family:'Press Start 2P',monospace;
+  height:100vh;
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  overflow:hidden;
+  color:#00ff66;
+}
+
+#gameWrap{
+  position:relative;
+  width:760px;
+  height:520px;
+  padding:20px;
+}
+
+#hud{
+  display:flex;
+  justify-content:space-between;
+  margin-bottom:12px;
+  font-size:12px;
+  text-shadow:0 0 8px #00ff66;
+}
+#hud span{
+  min-width:160px;
+  text-align:center;
+}
+
+canvas{
+  display:block;
+  margin:auto;
+  background:#030812;
+  border-radius:6px;
+  border:4px solid #00ff66;
+  box-shadow:
+    0 0 15px #00ff66,
+    inset 0 0 25px rgba(0,255,102,.25);
+}
+
+#overlay{
+  position:absolute;
+  inset:0;
+  background:rgba(0,0,0,.85);
+  display:flex;
+  justify-content:center;
+  align-items:center;
+  text-align:center;
+  z-index:10;
+}
+#overlay.hidden{display:none}
+
+#overlay h1{
+  font-size:22px;
+  margin-bottom:14px;
+  color:#ff4444;
+  text-shadow:0 0 15px #ff4444;
+}
+
+#overlay p{
+  font-size:13px;
+  color:#88ffbb;
+  animation:flicker 1.2s infinite;
+}
+
+@keyframes flicker{
+  0%,100%{opacity:1}
+  50%{opacity:.35}
+}
+</style>
+</head>
+
+<body>
+
+<div id="gameWrap">
+
+  <div id="hud">
+    <span id="score">SCORE: 0</span>
+    <span id="level">LEVEL: 1</span>
+    <span id="high">HIGH: 0</span>
+  </div>
+
+  <canvas id="game" width="720" height="440"></canvas>
+
+  <div id="overlay">
+    <div>
+      <h1 id="deathText">NEON SNAKE</h1>
+      <p>PRESS SPACE / TAP</p>
+    </div>
+  </div>
+
+</div>
+
+<script>
+const canvas = document.getElementById("game");
+const ctx = canvas.getContext("2d");
+
+const GRID = 20;
+const COLS = canvas.width / GRID;
+const ROWS = canvas.height / GRID;
+
+let snake=[], dir={x:1,y:0}, food={}, bomb={}, obstacles=[];
+let score=0, level=1, speed=8, alive=false, paused=false;
+let lastTick=0, deathReason="";
+
+let highScore = Number(localStorage.getItem("neonSnakeHS")) || 0;
+
+const uiScore=document.getElementById("score");
+const uiLevel=document.getElementById("level");
+const uiHigh=document.getElementById("high");
+const overlay=document.getElementById("overlay");
+const deathText=document.getElementById("deathText");
+
+uiHigh.textContent="HIGH: "+highScore;
+
+const rand=n=>Math.floor(Math.random()*n);
+
+/* ================= START GAME ================= */
+function startGame(){
+  snake=[
+    {x:10,y:10},
+    {x:9,y:10},
+    {x:8,y:10}
+  ];
+  dir={x:1,y:0};
+  score=0; level=1; speed=8;
+  alive=true; paused=false;
+
+  spawnFood(); spawnBomb(); spawnObstacles();
+
+  uiScore.textContent="SCORE: 0";
+  uiLevel.textContent="LEVEL: 1";
+  overlay.classList.add("hidden");
+}
+
+/* ================= SPAWN ================= */
+function spawnFood(){
+  food={x:rand(COLS),y:rand(ROWS),e:["🍎","🍒","🍇","🍌"][rand(4)]};
+}
+function spawnBomb(){
+  bomb={x:rand(COLS),y:rand(ROWS)};
+}
+function spawnObstacles(){
+  obstacles=[];
+  for(let i=0;i<level+3;i++){
+    obstacles.push({x:rand(COLS),y:rand(ROWS)});
+  }
+}
+
+/* ================= INPUT ================= */
+window.addEventListener("keydown",e=>{
+  if(e.code==="Space"){
+    if(!alive) startGame();
+    else paused=!paused;
+  }
+  if(!alive||paused) return;
+
+  if(e.key==="ArrowUp"&&dir.y===0)dir={x:0,y:-1};
+  if(e.key==="ArrowDown"&&dir.y===0)dir={x:0,y:1};
+  if(e.key==="ArrowLeft"&&dir.x===0)dir={x:-1,y:0};
+  if(e.key==="ArrowRight"&&dir.x===0)dir={x:1,y:0};
+});
+
+/* ================= UPDATE ================= */
+function update(){
+  const head={x:snake[0].x+dir.x,y:snake[0].y+dir.y};
+
+  if(head.x<0||head.y<0||head.x>=COLS||head.y>=ROWS)
+    return die("YOU HIT THE WALL ☠️");
+
+  if(snake.some(s=>s.x===head.x&&s.y===head.y))
+    return die("YOU ATE YOURSELF 💀");
+
+  if(obstacles.some(o=>o.x===head.x&&o.y===head.y))
+    return die("SPIKES IMPALED YOU 😈");
+
+  if(head.x===bomb.x&&head.y===bomb.y)
+    return die("BOMB EXPLODED 💥");
+
+  snake.unshift(head);
+
+  if(head.x===food.x&&head.y===food.y){
+    score++;
+    if(score%5===0){
+      level++; speed++;
+      spawnObstacles();
+    }
+    spawnFood(); spawnBomb();
+    uiScore.textContent="SCORE: "+score;
+    uiLevel.textContent="LEVEL: "+level;
+  }else{
+    snake.pop();
+  }
+}
+
+/* ================= DIE ================= */
+function die(reason){
+  alive=false;
+  deathText.textContent=reason;
+  overlay.classList.remove("hidden");
+
+  if(score>highScore){
+    highScore=score;
+    localStorage.setItem("neonSnakeHS",score);
+    uiHigh.textContent="HIGH: "+highScore;
+  }
+}
+
+/* ================= DRAW ================= */
+function draw(){
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+
+  // obstacles
+  ctx.fillStyle="#0a3";
+  obstacles.forEach(o=>{
+    ctx.fillRect(o.x*GRID,o.y*GRID,GRID,GRID);
+  });
+
+  // food & bomb
+  ctx.font="18px serif";
+  ctx.fillText(food.e,food.x*GRID+2,food.y*GRID+18);
+  ctx.fillText("💣",bomb.x*GRID+2,bomb.y*GRID+18);
+
+  // snake
+  snake.forEach((s,i)=>{
+    ctx.fillStyle=i===0?"#00ff66":"#00aa55";
+    ctx.beginPath();
+    ctx.arc(s.x*GRID+10,s.y*GRID+10,8,0,Math.PI*2);
+    ctx.fill();
+
+    if(i===0) drawFace(s);
+  });
+
+  if(paused){
+    ctx.fillStyle="rgba(0,0,0,.6)";
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    ctx.fillStyle="#00ff66";
+    ctx.font="18px 'Press Start 2P'";
+    ctx.fillText("PAUSED",canvas.width/2-80,canvas.height/2);
+  }
+}
+
+/* ================= SNAKE FACE ================= */
+function drawFace(head){
+  ctx.fillStyle="#001";
+
+  let ex1=0, ex2=0, ey=0, mx=0, my=0;
+
+  if(dir.x===1){ex1=4;ex2=4;ey=-3;mx=3;my=3}
+  if(dir.x===-1){ex1=-4;ex2=-4;ey=-3;mx=-3;my=3}
+  if(dir.y===1){ex1=-3;ex2=3;ey=4;mx=0;my=4}
+  if(dir.y===-1){ex1=-3;ex2=3;ey=-4;mx=0;my=-1}
+
+  // eyes
+  ctx.beginPath();
+  ctx.arc(head.x*GRID+10+ex1,head.y*GRID+10+ey,2,0,Math.PI*2);
+  ctx.arc(head.x*GRID+10+ex2,head.y*GRID+10+ey,2,0,Math.PI*2);
+  ctx.fill();
+
+  // smile
+  ctx.strokeStyle="#001";
+  ctx.beginPath();
+  ctx.arc(head.x*GRID+10+mx,head.y*GRID+12+my,3,0,Math.PI);
+  ctx.stroke();
+}
+
+/* ================= LOOP ================= */
+function loop(t){
+  if(alive&&!paused&&t-lastTick>1000/speed){
+    update(); lastTick=t;
+  }
+  draw();
+  requestAnimationFrame(loop);
+}
+
+/* ================= INIT ================= */
+overlay.classList.remove("hidden");
+requestAnimationFrame(loop);
+</script>
+
+</body>
+</html>
